@@ -3,6 +3,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
+import 'history_model.dart';
+import 'history_service.dart';
+import 'history_screen.dart';
+import 'pdf_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -40,14 +44,15 @@ class _HomeScreenState extends State<HomeScreen> {
   // ⚠️ তোমার PC এর IP দাও
   final String apiUrl = "http://192.168.0.106:8000/predict";
 
-  // ইংরেজি রোগের নাম → বাংলা
+  // ইংরেজি → বাংলা রোগের নাম
   final Map<String, String> diseaseInBangla = {
     'Acne and Rosacea Photos': 'ব্রণ ও রোসেসিয়া',
     'Actinic Keratosis Basal Cell Carcinoma and other Malignant Lesions':
         'ত্বকের ক্যান্সার জাতীয় রোগ',
     'Atopic Dermatitis Photos': 'এটোপিক ডার্মাটাইটিস (চুলকানি)',
     'Bullous Disease Photos': 'ফোসকা জাতীয় রোগ',
-    'Cellulitis Impetigo and other Bacterial Infections': 'ব্যাকটেরিয়াল চর্মরোগ',
+    'Cellulitis Impetigo and other Bacterial Infections':
+        'ব্যাকটেরিয়াল চর্মরোগ',
     'Eczema Photos': 'একজিমা',
     'Exanthems and Drug Eruptions': 'ওষুধের পার্শ্বপ্রতিক্রিয়াজনিত ফুসকুড়ি',
     'Hair Loss Photos Alopecia and other Hair Diseases': 'চুল পড়া রোগ',
@@ -73,13 +78,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // রোগ অনুযায়ী পরামর্শ
   final Map<String, String> diseaseAdvice = {
-    'Acne and Rosacea Photos': 'মুখ পরিষ্কার রাখুন। তৈলাক্ত খাবার এড়িয়ে চলুন।',
+    'Acne and Rosacea Photos':
+        'মুখ পরিষ্কার রাখুন। তৈলাক্ত খাবার এড়িয়ে চলুন।',
     'Eczema Photos': 'ত্বক আর্দ্র রাখুন। সুগন্ধিযুক্ত সাবান এড়িয়ে চলুন।',
     'Tinea Ringworm Candidiasis and other Fungal Infections':
         'আক্রান্ত স্থান শুকনো রাখুন। অ্যান্টিফাঙ্গাল ক্রিম ব্যবহার করুন।',
     'Scabies Lyme Disease and other Infestations and Bites':
         'কাপড় গরম পানিতে ধুন। পরিবারের সবাইকে চিকিৎসা করান।',
-    'Urticaria Hives': 'অ্যালার্জির কারণ খুঁজে বের করুন। অ্যান্টিহিস্টামিন নিন।',
+    'Urticaria Hives':
+        'অ্যালার্জির কারণ খুঁজে বের করুন। অ্যান্টিহিস্টামিন নিন।',
+    'Psoriasis pictures Lichen Planus and related diseases':
+        'ত্বক আর্দ্র রাখুন। রোদ থেকে দূরে থাকুন। ডাক্তারের পরামর্শ নিন।',
+    'Melanoma Skin Cancer Nevi and Moles':
+        'অবিলম্বে একজন চর্মরোগ বিশেষজ্ঞের পরামর্শ নিন। দেরি করবেন না।',
+    'Hair Loss Photos Alopecia and other Hair Diseases':
+        'পুষ্টিকর খাবার খান। মাথার ত্বক পরিষ্কার রাখুন।',
   };
 
   String getBanglaName(String englishName) {
@@ -125,10 +138,24 @@ class _HomeScreenState extends State<HomeScreen> {
       var response = await request.send();
       var responseBody = await response.stream.bytesToString();
       var data = json.decode(responseBody);
+
       setState(() {
         _result = data;
         _isLoading = false;
       });
+
+      // ✅ History save করো
+      if (data['success'] == true) {
+        await HistoryService.saveHistory(
+          HistoryItem(
+            imagePath: _selectedImage!.path,
+            disease: data['predicted_disease'],
+            diseaseBangla: getBanglaName(data['predicted_disease']),
+            confidence: data['confidence'],
+            dateTime: DateTime.now(),
+          ),
+        );
+      }
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
@@ -139,6 +166,125 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       }
+    }
+  }
+
+  // ✅ Confidence Warning Widget
+  Widget _buildConfidenceWarning(double confidence) {
+    if (confidence < 30) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, color: Colors.red, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '⚠️ ছবি স্পষ্ট নয়!',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Confidence অনেক কম। ভালো আলোতে আবার ছবি তুলুন অথবা আক্রান্ত স্থানের কাছ থেকে তুলুন।',
+                    style: TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (confidence < 70) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '⚡ মাঝারি নিশ্চিততা',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Result টি সম্ভাব্য। নিশ্চিত হতে অবশ্যই একজন চর্মরোগ বিশেষজ্ঞের পরামর্শ নিন।',
+                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.green),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '✅ উচ্চ নিশ্চিততা',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'AI ভালো confidence নিয়ে রোগ শনাক্ত করেছে। তবুও ডাক্তারের পরামর্শ নিন।',
+                    style: TextStyle(color: Colors.green, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -154,6 +300,18 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HistoryScreen()),
+              );
+            },
+            tooltip: 'ইতিহাস',
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -173,16 +331,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _selectedImage != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                        child: Image.file(
-                          _selectedImage!,
-                          fit: BoxFit.cover,
-                        ),
+                        child: Image.file(_selectedImage!, fit: BoxFit.cover),
                       )
                     : const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.add_photo_alternate,
-                              size: 80, color: Colors.teal),
+                          Icon(
+                            Icons.add_photo_alternate,
+                            size: 80,
+                            color: Colors.teal,
+                          ),
                           SizedBox(height: 12),
                           Text(
                             'ছবি নির্বাচন করুন',
@@ -241,8 +399,9 @@ class _HomeScreenState extends State<HomeScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed:
-                    _selectedImage != null && !_isLoading ? _analyzeImage : null,
+                onPressed: _selectedImage != null && !_isLoading
+                    ? _analyzeImage
+                    : null,
                 icon: _isLoading
                     ? const SizedBox(
                         width: 20,
@@ -267,7 +426,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SizedBox(height: 20),
 
-            // Result
             if (_result != null) _buildResultCard(),
           ],
         ),
@@ -302,6 +460,9 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✅ Confidence Warning সবার উপরে
+            _buildConfidenceWarning(confidence),
+
             // Header
             const Text(
               '🔍 শনাক্ত ফলাফল',
@@ -314,7 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const Divider(),
             const SizedBox(height: 8),
 
-            // বাংলায় রোগের নাম (বড় করে)
+            // বাংলায় রোগের নাম
             Text(
               banglaName,
               style: const TextStyle(
@@ -324,7 +485,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // ইংরেজি নাম (ছোট করে)
             Text(
               '($englishName)',
               style: TextStyle(
@@ -349,7 +509,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: confidence > 70 ? Colors.green : Colors.orange,
+                    color: confidence > 70
+                        ? Colors.green
+                        : confidence > 30
+                        ? Colors.orange
+                        : Colors.red,
                   ),
                 ),
               ],
@@ -357,14 +521,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SizedBox(height: 6),
 
-            // Progress bar
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
                 value: confidence / 100,
                 backgroundColor: Colors.grey.shade200,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  confidence > 70 ? Colors.green : Colors.orange,
+                  confidence > 70
+                      ? Colors.green
+                      : confidence > 30
+                      ? Colors.orange
+                      : Colors.red,
                 ),
                 minHeight: 10,
               ),
@@ -397,10 +564,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          advice,
-                          style: const TextStyle(fontSize: 13),
-                        ),
+                        Text(advice, style: const TextStyle(fontSize: 13)),
                       ],
                     ),
                   ),
@@ -415,7 +579,6 @@ class _HomeScreenState extends State<HomeScreen> {
               'অন্যান্য সম্ভাবনা:',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-
             const SizedBox(height: 8),
 
             ...(_result!['top3'] as List).map((item) {
@@ -470,8 +633,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: LinearProgressIndicator(
                         value: itemConf / 100,
                         backgroundColor: Colors.grey.shade200,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Colors.teal.shade300),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.teal.shade300,
+                        ),
                         minHeight: 5,
                       ),
                     ),
@@ -503,6 +667,36 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ✅ PDF Report Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await PdfService.generateReport(
+                    imagePath: _selectedImage!.path,
+                    disease: englishName,
+                    diseaseBangla: banglaName,
+                    confidence: confidence,
+                    top3: _result!['top3'],
+                    advice: advice,
+                    diseaseInBangla: diseaseInBangla,
+                  );
+                },
+                icon: const Icon(Icons.picture_as_pdf),
+                label: const Text(
+                  'PDF Report তৈরি করুন',
+                  style: TextStyle(fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
               ),
             ),
           ],
