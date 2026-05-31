@@ -1,0 +1,23 @@
+# Dataset (অনেক বড় — upload করব না)
+backend/dataset/
+
+# Model file (অনেক বড়)
+backend/model/skin_disease_model.h5
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Flutter
+flutter_app/.dart_tool/
+flutter_app/build/
+flutter_app/.flutter-plugins
+flutter_app/.flutter-plugins-dependencies
+
+# VS Code
+.vscode/
+
+# Environment
+.env
+*.env
