@@ -12,7 +12,7 @@ CLASS_NAMES_PATH = os.path.join(BASE_DIR, 'model', 'class_names.json')
 
 IMG_SIZE = (224, 224)
 BATCH_SIZE = 32
-EPOCHS = 10
+EPOCHS = 20
 
 print(f"✅ Dataset path: {DATASET_PATH}")
 print(f"✅ Dataset exists: {os.path.exists(DATASET_PATH)}")
