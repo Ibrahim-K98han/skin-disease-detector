@@ -10,7 +10,6 @@ DATASET_PATH = os.path.join(BASE_DIR, 'dataset', 'train')
 MODEL_SAVE_PATH = os.path.join(BASE_DIR, 'model', 'skin_disease_model.h5')
 CLASS_NAMES_PATH = os.path.join(BASE_DIR, 'model', 'class_names.json')
 
-#j
 IMG_SIZE = (224, 224)
 BATCH_SIZE = 32
 EPOCHS = 20
